@@ -1,0 +1,4 @@
+/check_cap
+asm_*.h
+asm_*.s
+inline_asm_*.h

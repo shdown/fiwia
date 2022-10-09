@@ -831,7 +831,7 @@ def FUNC_shl(emitter, n, use_bmi2=False):
             emitter,
             src=cur_src,
             reg_dst=reg_tmp_1,
-            reg_donor=None,
+            reg_donor=cur_donor,
             reg_count=reg_count,
             reg_neg_count=reg_neg_count,
             reg_scratch=reg_scratch,
@@ -869,6 +869,30 @@ def FUNC_aors(emitter, n, aors):
             emitter.emit(f'{aors.ADCSBB}q {reg_tmp}, {a.displace(i)}')
         else:
             emitter.emit(f'{aors.ADDSUB}q {reg_tmp}, {a.displace(i)}')
+
+    ret = emitter.take_retval_reg()
+    emitter.emit(f'sbbq {ret}, {ret}')
+
+
+def FUNC_aors_masked(emitter, n, aors):
+    reg_a = emitter.take_arg_reg(index=0, write=False)
+    reg_b = emitter.take_arg_reg(index=1, write=False)
+    reg_mask = emitter.take_arg_reg(index=2, write=False)
+
+    a = PointerReg(reg_a)
+    b = PointerReg(reg_b)
+
+    limb_regs = [emitter.reg_store.take(write=True) for _ in range(n)]
+
+    for i in range(n):
+        emitter.emit(f'movq {b.displace(i)}, {limb_regs[i]}')
+        emitter.emit(f'andq {reg_mask}, {limb_regs[i]}')
+
+    for i in range(n):
+        if i:
+            emitter.emit(f'{aors.ADCSBB}q {limb_regs[i]}, {a.displace(i)}')
+        else:
+            emitter.emit(f'{aors.ADDSUB}q {limb_regs[i]}, {a.displace(i)}')
 
     ret = emitter.take_retval_reg()
     emitter.emit(f'sbbq {ret}, {ret}')
@@ -1128,6 +1152,14 @@ def get_generated_funcs(n):
             name=f'{PREFIX}_sub_{n}',
             proto='#*, @#* -> #',
             callback=lambda emitter: FUNC_aors(emitter, n, AORS_SUB)),
+        GeneratedFunc(
+            name=f'{PREFIX}_add_masked_{n}',
+            proto='#*, @#*, # -> #',
+            callback=lambda emitter: FUNC_aors_masked(emitter, n, AORS_ADD)),
+        GeneratedFunc(
+            name=f'{PREFIX}_sub_masked_{n}',
+            proto='#*, @#*, # -> #',
+            callback=lambda emitter: FUNC_aors_masked(emitter, n, AORS_SUB)),
         GeneratedFunc(
             name=f'{PREFIX}_negate_{n}',
             proto='@#*, #* -> #',

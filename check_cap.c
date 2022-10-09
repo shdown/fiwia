@@ -66,7 +66,6 @@ static int test_sse2(void)
         fprintf(stderr, "pslldq gave unexpected result.\n");
         return 1;
     }
-    return 0;
 }
 
 static int test_avx(void)
@@ -97,10 +96,11 @@ static int test_avx2(void)
     );
     if (words[0] == 256 && words[1] == 512 && words[2] == 768 && words[3] == 1024) {
         fprintf(stderr, "vpslldq is supported.\n");
+        return 0;
     } else {
         fprintf(stderr, "vpslldq gave unexpected result.\n");
+        return 1;
     }
-    return 0;
 }
 
 static void print_usage(void)

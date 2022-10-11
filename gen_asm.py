@@ -1102,6 +1102,9 @@ def run_process(args):
 
 
 def check_cap(cap_name):
+    override = os.getenv(f'FIWIA_CAP_{cap_name.upper()}')
+    if override:
+        return bool(int(override))
     my_dir = os.path.dirname(os.path.abspath(__file__))
     if not run_process([os.getenv('CC') or 'gcc', f'{my_dir}/check_cap.c', '-o', f'{my_dir}/check_cap']):
         raise ValueError('cannot compile check_cap')
@@ -1239,9 +1242,9 @@ def get_generated_funcs(n):
     ]
 
 
-def gen_asm(n):
+def gen_asm(funcs):
     print('# Auto-generated; do not edit.')
-    for func in get_generated_funcs(n):
+    for func in funcs:
         print()
         print(f'.global {func.name}')
         print(f'.type {func.name}, @function')
@@ -1266,14 +1269,14 @@ def proto2c_type(s, bother_with_const=True):
     return s.strip()
 
 
-def gen_c_header(n):
+def gen_c_header(funcs):
     print('''\
 // Auto-generated; do not edit.
 #pragma once
 #include <stdint.h>
 ''')
 
-    for func in get_generated_funcs(n):
+    for func in funcs:
         param_list, retval = parse_proto(func.proto)
 
         c_param_list = ', '.join(proto2c_type(x) for x in param_list)
@@ -1282,13 +1285,13 @@ def gen_c_header(n):
         print(f'extern {c_retval} {func.name}({c_param_list});')
 
 
-def gen_inline_asm(n):
+def gen_inline_asm(funcs):
     print('// Auto-generated; do not edit.')
     print('#pragma once')
     print('#include <stdint.h>')
     print('#include "asm_config.h"')
 
-    for func in get_generated_funcs(n):
+    for func in funcs:
         param_list, retval = parse_proto(func.proto)
 
         c_param_list = ', '.join(f'{proto2c_type(t)} arg{i}' for i, t in enumerate(param_list))
@@ -1318,7 +1321,7 @@ def print_usage_and_exit(msg=None):
         print(msg, file=sys.stderr)
 
     print(f'''
-USAGE: {sys.argv[0]} <ACTION> <WIDTH>
+USAGE: {sys.argv[0]} <ACTION> <WIDTH> [<FUNC_NAMES>]
 
 Valid <ACTION>s:
  * gen_asm: print assembly to stdout
@@ -1326,24 +1329,30 @@ Valid <ACTION>s:
  * gen_inline_asm: print C header with inline functions to stdout
 ''', file=sys.stderr)
 
-    exit(2)
+    sys.exit(2)
 
 
 def main():
-    if len(sys.argv) != 3:
-        print_usage_and_exit(msg='Expected exactly two arguments.')
+    if len(sys.argv) not in [3, 4]:
+        print_usage_and_exit(msg='Wrong number of arguments.')
     action = sys.argv[1]
     try:
         n = int(sys.argv[2])
     except ValueError:
         print_usage_and_exit(msg='Invalid width.')
 
+    if len(sys.argv) == 4:
+        name_filters = frozenset(sys.argv[3].split(','))
+        funcs = filter(lambda f: f.name in name_filters, get_generated_funcs(n))
+    else:
+        funcs = get_generated_funcs(n)
+
     if action == 'gen_asm':
-        gen_asm(n)
+        gen_asm(funcs)
     elif action == 'gen_c_header':
-        gen_c_header(n)
+        gen_c_header(funcs)
     elif action == 'gen_inline_asm':
-        gen_inline_asm(n)
+        gen_inline_asm(funcs)
     else:
         print_usage_and_exit(msg='Invalid action.')
 

@@ -82,6 +82,29 @@ Functions
 
   Returns `(uint64_t) -1` if `{a, W}` == `{b, W}`, zero otherwise.
 
+  **NOTE**: fiwia doesn't generate SIMD instructions, and this is the only function that can benefit from using them.
+  The implementation is thus suboptimal and this function is only included for completeness.
+  You can probably get speedup by rewriting it in C in the following way:
+  ```
+  uint64_t asm_cmpeq_${W}(const uint64_t *a, const uint64_t *b)
+  {
+      uint64_t r = 0;
+      for (int i = 0; i < W; ++i)
+          r |= (a[i] ^ b[i]);
+      // r = r ? 0 : -1;
+      asm (
+          "subq $1, %[r]\n"
+          "sbbq %[r], %[r]\n"
+          : [r] "+r" (r)
+          : /*no inputs*/
+          : "cc"
+      );
+      return r;
+  }
+  ```
+  Both gcc and clang are smart enough to vectorize the loop.
+  All x86-64 processors support SSE2; be sure to tell your compiler whether your hardware supports AVX, AVX-512 or another extensions.
+
 * `uint64_t asm_mul_q_${W}(const uint64_t *a, uint64_t b, uint64_t *c)`
 
   Multiplies `{a, W}` by `b`, writing the result without the most significant limb to `{c, W}` and returning the most significant limb of the result.

@@ -740,9 +740,6 @@ def FUNC_shr(emitter, n, is_signed=False, use_bmi2=False):
     reg_tmp_2 = emitter.reg_store.take(write=True)
 
     if use_bmi2:
-        label_done = emitter.gen_label()
-        emitter.emit(f'testq {reg_count}, {reg_count}')
-        emitter.emit(f'jz {label_done}')
         reg_neg_count = emitter.reg_store.take(write=True)
         reg_scratch = emitter.reg_store.take(write=True)
         emitter.emit(f'movq {reg_count}, {reg_neg_count}')
@@ -781,9 +778,6 @@ def FUNC_shr(emitter, n, is_signed=False, use_bmi2=False):
         emitter.emit(f'movq {reg_tmp_1}, {dst.displace(i)}')
         reg_tmp_1, reg_tmp_2 = reg_tmp_2, reg_tmp_1
 
-    if label_done is not None:
-        emitter.label_here(label_done)
-
 
 def FUNC_shl(emitter, n, use_bmi2=False):
     if not use_bmi2:
@@ -800,15 +794,11 @@ def FUNC_shl(emitter, n, use_bmi2=False):
     reg_tmp_2 = emitter.reg_store.take(write=True)
 
     if use_bmi2:
-        label_done = emitter.gen_label()
-        emitter.emit(f'testq {reg_count}, {reg_count}')
-        emitter.emit(f'jz {label_done}')
         reg_neg_count = emitter.reg_store.take(write=True)
         reg_scratch = emitter.reg_store.take(write=True)
         emitter.emit(f'movq {reg_count}, {reg_neg_count}')
         emitter.emit(f'negq {reg_neg_count}')
     else:
-        label_done = None
         reg_neg_count = None
         reg_scratch = None
 
@@ -839,9 +829,6 @@ def FUNC_shl(emitter, n, use_bmi2=False):
 
         emitter.emit(f'movq {reg_tmp_1}, {dst.displace(i)}')
         reg_tmp_1, reg_tmp_2 = reg_tmp_2, reg_tmp_1
-
-    if label_done is not None:
-        emitter.label_here(label_done)
 
 
 class AORS_ADD:
@@ -1256,18 +1243,33 @@ def get_generated_funcs(n):
             name=f'{PREFIX}_mul_{n}',
             proto='@#*, @#*, #* -> void',
             callback=lambda emitter: choose_plain_or_bmi2(FUNC_mul, FUNC_mul_bmi2, emitter, n, n)),
+
         GeneratedFunc(
-            name=f'{PREFIX}_shr_{n}',
+            name=f'{PREFIX}_shr_nz_{n}',
             proto='@#*, #, #* -> void',
             callback=lambda emitter: FUNC_shr(emitter, n, use_bmi2=check_cap_cached('bmi2'))),
         GeneratedFunc(
-            name=f'{PREFIX}_S_shr_{n}',
+            name=f'{PREFIX}_S_shr_nz_{n}',
             proto='@#*, #, #* -> void',
             callback=lambda emitter: FUNC_shr(emitter, n, is_signed=True, use_bmi2=check_cap_cached('bmi2'))),
         GeneratedFunc(
-            name=f'{PREFIX}_shl_{n}',
+            name=f'{PREFIX}_shl_nz_{n}',
             proto='@#*, #, #* -> void',
             callback=lambda emitter: FUNC_shl(emitter, n, use_bmi2=check_cap_cached('bmi2'))),
+
+        GeneratedFunc(
+            name=f'{PREFIX}_shr_{n}',
+            proto='@#*, #, #* -> void',
+            callback=lambda emitter: FUNC_shr(emitter, n, use_bmi2=False)),
+        GeneratedFunc(
+            name=f'{PREFIX}_S_shr_{n}',
+            proto='@#*, #, #* -> void',
+            callback=lambda emitter: FUNC_shr(emitter, n, is_signed=True, use_bmi2=False)),
+        GeneratedFunc(
+            name=f'{PREFIX}_shl_{n}',
+            proto='@#*, #, #* -> void',
+            callback=lambda emitter: FUNC_shl(emitter, n, use_bmi2=False)),
+
         GeneratedFunc(
             name=f'{PREFIX}_shr_words_{n}',
             proto='@#*, #, #* -> void',

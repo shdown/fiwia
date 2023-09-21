@@ -135,15 +135,11 @@ Functions
 
   If `n` >= 64, the behavior is undefined.
 
-  **WARNING**: leaky by `n` (might test if `n` is zero to skip shifting).
-
 * `void asm_S_shr_${W}(const uint64_t *a, uint64_t n, uint64_t *c)`
 
   Performs signed right shift of `{a, W}` by `n` bits, writing the result into `{c, W}`.
 
   If `n` >= 64, the behavior is undefined.
-
-  **WARNING**: leaky by `n` (might test if `n` is zero to skip shifting).
 
 * `void asm_shl_${W}(const uint64_t *a, uint64_t n, uint64_t *c)`
 
@@ -151,7 +147,23 @@ Functions
 
   If `n` >= 64, the behavior is undefined.
 
-  **WARNING**: leaky by `n` (might test if `n` is zero to skip shifting).
+* `void asm_shr_nz_${W}(const uint64_t *a, uint64_t n, uint64_t *c)`
+
+  Performs unsigned right shift of `{a, W}` by `n` bits, writing the result into `{c, W}`.
+
+  If `n` >= 64 or `n == 0`, the behavior is undefined.
+
+* `void asm_S_shr_nz_${W}(const uint64_t *a, uint64_t n, uint64_t *c)`
+
+  Performs signed right shift of `{a, W}` by `n` bits, writing the result into `{c, W}`.
+
+  If `n` >= 64 or `n == 0`, the behavior is undefined.
+
+* `void asm_shl_nz_${W}(const uint64_t *a, uint64_t n, uint64_t *c)`
+
+  Performs left shift of `{a, W}` by `n` bits, writing the result into `{c, W}`.
+
+  If `n` >= 64 or `n == 0`, the behavior is undefined.
 
 * `void asm_shr_words_${W}(const uint64_t *a, uint64_t n, uint64_t *c)`
 

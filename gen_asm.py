@@ -874,7 +874,27 @@ def FUNC_aors(emitter, n, aors):
     emitter.emit(f'sbbq {ret}, {ret}')
 
 
-def FUNC_aors_masked(emitter, n, aors):
+def aors_masked_aux(emitter, a, b, reg_c, reg_mask, m_regs, aors, save=False, restore=False):
+    for i in range(len(m_regs)):
+        emitter.emit(f'movq {b.displace(i)}, {m_regs[i]}')
+        emitter.emit(f'andq {reg_mask}, {m_regs[i]}')
+
+    if restore:
+        assert reg_c is not None
+        emitter.emit(f'btq $0, {reg_c}')
+
+    for i in range(len(m_regs)):
+        if (not restore) and (i == 0):
+            emitter.emit(f'{aors.ADDSUB}q {m_regs[i]}, {a.displace(i)}')
+        else:
+            emitter.emit(f'{aors.ADCSBB}q {m_regs[i]}, {a.displace(i)}')
+
+    if save:
+        assert reg_c is not None
+        emitter.emit(f'sbbq {reg_c}, {reg_c}')
+
+
+def FUNC_aors_masked(emitter, n, aors, m=8):
     reg_a = emitter.take_arg_reg(index=0, write=False)
     reg_b = emitter.take_arg_reg(index=1, write=False)
     reg_mask = emitter.take_arg_reg(index=2, write=False)
@@ -882,17 +902,38 @@ def FUNC_aors_masked(emitter, n, aors):
     a = PointerReg(reg_a)
     b = PointerReg(reg_b)
 
-    limb_regs = [emitter.reg_store.take(write=True) for _ in range(n)]
-
-    for i in range(n):
-        emitter.emit(f'movq {b.displace(i)}, {limb_regs[i]}')
-        emitter.emit(f'andq {reg_mask}, {limb_regs[i]}')
-
-    for i in range(n):
-        if i:
-            emitter.emit(f'{aors.ADCSBB}q {limb_regs[i]}, {a.displace(i)}')
-        else:
-            emitter.emit(f'{aors.ADDSUB}q {limb_regs[i]}, {a.displace(i)}')
+    if n > m:
+        reg_c = emitter.reg_store.take(write=True)
+        m_regs = [emitter.reg_store.take(write=True) for _ in range(m)]
+        restore = False
+        while n:
+            this_m = min(n, m)
+            aors_masked_aux(
+                emitter,
+                a=a,
+                b=b,
+                reg_c=reg_c,
+                reg_mask=reg_mask,
+                m_regs=m_regs[:this_m],
+                aors=aors,
+                save=this_m != n,
+                restore=restore)
+            a = a.displace(this_m)
+            b = b.displace(this_m)
+            restore = True
+            n -= this_m
+    else:
+        m_regs = [emitter.reg_store.take(write=True) for _ in range(n)]
+        aors_masked_aux(
+            emitter,
+            a=a,
+            b=b,
+            reg_c=None,
+            reg_mask=reg_mask,
+            m_regs=m_regs,
+            aors=aors,
+            save=False,
+            restore=False)
 
     ret = emitter.take_retval_reg()
     emitter.emit(f'sbbq {ret}, {ret}')

@@ -881,7 +881,7 @@ def aors_masked_aux(emitter, a, b, reg_c, reg_mask, m_regs, aors, save=False, re
         emitter.emit(f'sbbq {reg_c}, {reg_c}')
 
 
-def FUNC_aors_masked(emitter, n, aors, m=8):
+def FUNC_aors_masked(emitter, n, aors, m):
     reg_a = emitter.take_arg_reg(index=0, write=False)
     reg_b = emitter.take_arg_reg(index=1, write=False)
     reg_mask = emitter.take_arg_reg(index=2, write=False)
@@ -1047,49 +1047,89 @@ def FUNC_cmpeq(emitter, n):
     emitter.emit(f'sbbq {ret}, {ret}')
 
 
-def cond_shr_word(emitter, regs, reg_fill):
-    for i in range(len(regs) - 1):
-        emitter.emit(f'cmovaq {regs[i + 1]}, {regs[i]}')
-    emitter.emit(f'cmovaq {reg_fill}, {regs[-1]}')
+# Calls assign_callback(src_i=..., dst_i=..., cond=...)
 
-
-def cond_shl_word(emitter, regs, reg_zero):
-    for i in reversed(range(1, len(regs))):
-        emitter.emit(f'cmovaq {regs[i - 1]}, {regs[i]}')
-    emitter.emit(f'cmovaq {reg_zero}, {regs[0]}')
-
-
-def FUNC_shr_words(emitter, n, is_signed=False):
-    reg_a = emitter.take_arg_reg(index=0, write=False)
-    reg_b = emitter.take_arg_reg(index=1, write=False)
-    reg_c = emitter.take_arg_reg(index=2, write=False)
-
-    a = PointerReg(reg_a)
-    c = PointerReg(reg_c)
-
-    tmp_regs = [emitter.reg_store.take(write=True) for _ in range(n)]
+def cond_shr_words(n, amount, assign_callback, cond):
     for i in range(n):
-        emitter.emit(f'movq {a.displace(i)}, {tmp_regs[i]}')
+        src_i = i + amount
+        if src_i >= n:
+            assign_callback(src_i=None, dst_i=i, cond=cond)
+        else:
+            assign_callback(src_i=src_i, dst_i=i, cond=cond)
 
-    if is_signed:
-        reg_fill = emitter.reg_store.take(write=True)
-        emitter.emit(f'movq {tmp_regs[-1]}, {reg_fill}')
-        emitter.emit(f'sarq $63, {reg_fill}')
+
+def cond_shl_words(n, amount, assign_callback, cond):
+    for i in reversed(range(n)):
+        src_i = i - amount
+        if src_i < 0:
+            assign_callback(src_i=None, dst_i=i, cond=cond)
+        else:
+            assign_callback(src_i=src_i, dst_i=i, cond=cond)
+
+
+def dumb_shr_words(emitter, reg_b, n, assign_callback):
+    for i in range(n):
+        if i:
+            emitter.emit(f'cmpq ${i}, {reg_b}')
+        else:
+            emitter.emit(f'testq {reg_b}, {reg_b}')
+        cond_shr_words(n=n - i, amount=1, assign_callback=assign_callback, cond='a')
+
+
+def dumb_shl_words(emitter, reg_b, n, assign_callback):
+    for i in range(n):
+        if i:
+            emitter.emit(f'cmpq ${i}, {reg_b}')
+        else:
+            emitter.emit(f'testq {reg_b}, {reg_b}')
+
+        def new_assign_callback(src_i, dst_i, cond):
+            dst_i += i
+            if src_i is not None:
+                src_i += i
+            assign_callback(src_i=src_i, dst_i=dst_i, cond=cond)
+
+        cond_shl_words(n=n - i, amount=1, assign_callback=new_assign_callback, cond='a')
+
+
+def fancy_shift_words(emitter, reg_b, n, cond_shx_words, assign_callback):
+    def perform_pass(cond, amount):
+        cond_shx_words(n=n, amount=amount, assign_callback=assign_callback, cond=cond)
+
+    i = 0
+    while True:
+        bit = 1 << i
+        if bit >= n:
+            break
+        emitter.emit(f'btq ${i}, {reg_b}')
+        perform_pass(cond='c', amount=bit)
+        i += 1
+
+    emitter.emit(f'cmpq ${n - 1}, {reg_b}')
+    perform_pass(cond='a', amount=n)
+
+
+def shift_words_auto(emitter, reg_b, n, direction, assign_callback):
+    if direction == 'left':
+        left = True
+    elif direction == 'right':
+        left = False
     else:
-        reg_fill = emitter.take_zero_reg()
+        raise ValueError('expected either "left" or "right" as direction')
 
-    for i in range(n):
-        if i:
-            emitter.emit(f'cmpq ${i}, {reg_b}')
+    if n <= 8:
+        if left:
+            dumb_shl_words(emitter, reg_b, n, assign_callback)
         else:
-            emitter.emit(f'testq {reg_b}, {reg_b}')
-        cond_shr_word(emitter, tmp_regs[:n - i], reg_fill)
+            dumb_shr_words(emitter, reg_b, n, assign_callback)
+    else:
+        if left:
+            fancy_shift_words(emitter, reg_b, n, cond_shl_words, assign_callback)
+        else:
+            fancy_shift_words(emitter, reg_b, n, cond_shr_words, assign_callback)
 
-    for i in range(n):
-        emitter.emit(f'movq {tmp_regs[i]}, {c.displace(i)}')
 
-
-def FUNC_shl_words(emitter, n):
+def FUNC_shift_words(emitter, n, direction, is_signed, m=8):
     reg_a = emitter.take_arg_reg(index=0, write=False)
     reg_b = emitter.take_arg_reg(index=1, write=False)
     reg_c = emitter.take_arg_reg(index=2, write=False)
@@ -1097,21 +1137,60 @@ def FUNC_shl_words(emitter, n):
     a = PointerReg(reg_a)
     c = PointerReg(reg_c)
 
-    reg_zero = emitter.take_zero_reg()
-
-    tmp_regs = [emitter.reg_store.take(write=True) for _ in range(n)]
-    for i in range(n):
-        emitter.emit(f'movq {a.displace(i)}, {tmp_regs[i]}')
-
-    for i in range(n):
-        if i:
-            emitter.emit(f'cmpq ${i}, {reg_b}')
+    if n > m:
+        if is_signed:
+            reg_fill = emitter.reg_store.take(write=True)
+            emitter.emit(f'movq {a.displace(n - 1)}, {reg_fill}')
+            emitter.emit(f'sarq $63, {reg_fill}')
         else:
-            emitter.emit(f'testq {reg_b}, {reg_b}')
-        cond_shl_word(emitter, tmp_regs[i:], reg_zero)
+            reg_fill = emitter.take_zero_reg()
 
-    for i in range(n):
-        emitter.emit(f'movq {tmp_regs[i]}, {c.displace(i)}')
+        reg_tmp = emitter.reg_store.take(write=True)
+
+        written_to_c_at = [False for _ in range(n)]
+
+        def get_ptr(i):
+            if written_to_c_at[i]:
+                return c.displace(i)
+            else:
+                return a.displace(i)
+
+        def assign_callback(src_i, dst_i, cond):
+            emitter.emit(f'movq {get_ptr(dst_i)}, {reg_tmp}')
+            if src_i is None:
+                emitter.emit(f'cmov{cond}q {reg_fill}, {reg_tmp}')
+            else:
+                emitter.emit(f'cmov{cond}q {get_ptr(src_i)}, {reg_tmp}')
+            emitter.emit(f'movq {reg_tmp}, {c.displace(dst_i)}')
+
+            written_to_c_at[dst_i] = True
+
+        shift_words_auto(emitter, reg_b, n, direction, assign_callback)
+
+        assert all(written_to_c_at)
+
+    else:
+        tmp_regs = [emitter.reg_store.take(write=True) for _ in range(n)]
+        for i in range(n):
+            emitter.emit(f'movq {a.displace(i)}, {tmp_regs[i]}')
+
+        if is_signed:
+            reg_fill = emitter.reg_store.take(write=True)
+            emitter.emit(f'movq {tmp_regs[-1]}, {reg_fill}')
+            emitter.emit(f'sarq $63, {reg_fill}')
+        else:
+            reg_fill = emitter.take_zero_reg()
+
+        def assign_callback(src_i, dst_i, cond):
+            if src_i is None:
+                emitter.emit(f'cmov{cond}q {reg_fill}, {tmp_regs[dst_i]}')
+            else:
+                emitter.emit(f'cmov{cond}q {tmp_regs[src_i]}, {tmp_regs[dst_i]}')
+
+        shift_words_auto(emitter, reg_b, n, direction, assign_callback)
+
+        for i in range(n):
+            emitter.emit(f'movq {tmp_regs[i]}, {c.displace(i)}')
 
 
 #------------------------------------------------------------------------------
@@ -1173,7 +1252,9 @@ class GeneratedFunc:
 PREFIX = 'asm'
 
 
-def get_generated_funcs(n):
+def get_generated_funcs(n, is_inline_asm):
+    aors_masked_m = 8 if is_inline_asm else 4
+    shift_words_m = 8 if is_inline_asm else 4
     return [
         GeneratedFunc(
             name=f'{PREFIX}_add_{n}',
@@ -1186,11 +1267,11 @@ def get_generated_funcs(n):
         GeneratedFunc(
             name=f'{PREFIX}_add_masked_{n}',
             proto='#*, @#*, # -> #',
-            callback=lambda emitter: FUNC_aors_masked(emitter, n, AORS_ADD)),
+            callback=lambda emitter: FUNC_aors_masked(emitter, n, AORS_ADD, m=aors_masked_m)),
         GeneratedFunc(
             name=f'{PREFIX}_sub_masked_{n}',
             proto='#*, @#*, # -> #',
-            callback=lambda emitter: FUNC_aors_masked(emitter, n, AORS_SUB)),
+            callback=lambda emitter: FUNC_aors_masked(emitter, n, AORS_SUB, m=aors_masked_m)),
         GeneratedFunc(
             name=f'{PREFIX}_negate_{n}',
             proto='@#*, #* -> #',
@@ -1273,15 +1354,18 @@ def get_generated_funcs(n):
         GeneratedFunc(
             name=f'{PREFIX}_shr_words_{n}',
             proto='@#*, #, #* -> void',
-            callback=lambda emitter: FUNC_shr_words(emitter, n)),
+            callback=lambda emitter: FUNC_shift_words(
+                emitter, n, direction='right', is_signed=False, m=shift_words_m)),
         GeneratedFunc(
             name=f'{PREFIX}_S_shr_words_{n}',
             proto='@#*, #, #* -> void',
-            callback=lambda emitter: FUNC_shr_words(emitter, n, is_signed=True)),
+            callback=lambda emitter: FUNC_shift_words(
+                emitter, n, direction='right', is_signed=True, m=shift_words_m)),
         GeneratedFunc(
             name=f'{PREFIX}_shl_words_{n}',
             proto='@#*, #, #* -> void',
-            callback=lambda emitter: FUNC_shl_words(emitter, n)),
+            callback=lambda emitter: FUNC_shift_words(
+                emitter, n, direction='left', is_signed=False, m=shift_words_m)),
     ]
 
 
@@ -1384,20 +1468,27 @@ def main():
     except ValueError:
         print_usage_and_exit(msg='Invalid width.')
 
-    if len(sys.argv) == 4:
-        name_filters = frozenset(sys.argv[3].split(','))
-        funcs = filter(lambda f: f.name in name_filters, get_generated_funcs(n))
-    else:
-        funcs = get_generated_funcs(n)
-
     if action == 'gen_asm':
-        gen_asm(funcs)
+        gen_func = gen_asm
+        is_inline_asm = False
     elif action == 'gen_c_header':
-        gen_c_header(funcs)
+        gen_func = gen_c_header
+        is_inline_asm = False
     elif action == 'gen_inline_asm':
-        gen_inline_asm(funcs)
+        gen_func = gen_inline_asm
+        is_inline_asm = True
     else:
         print_usage_and_exit(msg='Invalid action.')
+
+    if len(sys.argv) == 4:
+        name_filters = frozenset(sys.argv[3].split(','))
+        funcs = filter(
+            lambda f: f.name in name_filters,
+            get_generated_funcs(n, is_inline_asm=is_inline_asm))
+    else:
+        funcs = get_generated_funcs(n, is_inline_asm=is_inline_asm)
+
+    gen_func(funcs)
 
 
 if __name__ == '__main__':

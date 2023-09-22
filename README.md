@@ -62,6 +62,18 @@ Functions
 
   Subtracts `b` from `{a, W}`. Returns borrow, either 0 or `(uint64_t) -1`.
 
+* `uint64_t asm_add_q_leaky_${W}(uint64_t *a, uint64_t b)`
+
+  Adds `b` to `{a, W}`. Returns carry, either 0 or `(uint64_t) -1`.
+
+  **WARNING**: leaky.
+
+* `uint64_t asm_sub_q_leaky_${W}(uint64_t *a, uint64_t b)`
+
+  **WARNING**: leaky.
+
+  Subtracts `b` from `{a, W}`. Returns borrow, either 0 or `(uint64_t) -1`.
+
 * `uint64_t asm_cmplt_${W}(const uint64_t *a, const uint64_t *b)`
 
   Returns `(uint64_t) -1` if `{a, W}` < `{b, W}` (as unsigned integers), zero otherwise.

@@ -926,7 +926,7 @@ def FUNC_aors_masked(emitter, n, aors, m):
     emitter.emit(f'sbbq {ret}, {ret}')
 
 
-def FUNC_aors_q(emitter, n, aors):
+def FUNC_aors_q(emitter, n, aors, leaky=False):
     reg_a = emitter.take_arg_reg(index=0, write=False)
     reg_b = emitter.take_arg_reg(index=1, write=False)
 
@@ -934,11 +934,24 @@ def FUNC_aors_q(emitter, n, aors):
 
     a = PointerReg(reg_a)
 
+    if leaky and n > 2:
+        label_done = emitter.gen_label()
+    else:
+        label_done = None
+
     for i in range(n):
         if i:
             emitter.emit(f'{aors.ADCSBB}q {zero}, {a.displace(i)}')
+            if (label_done is not None) and (i != n - 1):
+                emitter.emit(f'jnc {label_done}')
         else:
             emitter.emit(f'{aors.ADDSUB}q {reg_b}, {a.displace(i)}')
+            # We don't want to emit a 'jnc {label_done}' here since the probability of having a
+            # carry is very close to 1/2 (can't be predicted well by the branch predictor).
+            # For the following words it is less than 2 ** -64.
+
+    if label_done is not None:
+        emitter.label_here(label_done)
 
     ret = emitter.take_retval_reg()
     emitter.emit(f'sbbq {ret}, {ret}')
@@ -1276,6 +1289,7 @@ def get_generated_funcs(n, is_inline_asm):
             name=f'{PREFIX}_negate_{n}',
             proto='@#*, #* -> #',
             callback=lambda emitter: FUNC_negate(emitter, n)),
+
         GeneratedFunc(
             name=f'{PREFIX}_add_q_{n}',
             proto='#*, # -> #',
@@ -1284,6 +1298,16 @@ def get_generated_funcs(n, is_inline_asm):
             name=f'{PREFIX}_sub_q_{n}',
             proto='#*, # -> #',
             callback=lambda emitter: FUNC_aors_q(emitter, n, AORS_SUB)),
+
+        GeneratedFunc(
+            name=f'{PREFIX}_add_q_leaky_{n}',
+            proto='#*, # -> #',
+            callback=lambda emitter: FUNC_aors_q(emitter, n, AORS_ADD, leaky=True)),
+        GeneratedFunc(
+            name=f'{PREFIX}_sub_q_leaky_{n}',
+            proto='#*, # -> #',
+            callback=lambda emitter: FUNC_aors_q(emitter, n, AORS_SUB, leaky=True)),
+
         GeneratedFunc(
             name=f'{PREFIX}_cmplt_{n}',
             proto='@#*, @#* -> #',

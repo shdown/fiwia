@@ -1060,8 +1060,6 @@ def FUNC_cmpeq(emitter, n):
     emitter.emit(f'sbbq {ret}, {ret}')
 
 
-# Calls assign_callback(src_i=..., dst_i=..., cond=...)
-
 def cond_shr_words(n, amount, assign_callback, cond):
     for i in range(n):
         src_i = i + amount

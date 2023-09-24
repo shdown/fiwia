@@ -94,7 +94,7 @@ Functions
 
   Returns `(uint64_t) -1` if `{a, W}` == `{b, W}`, zero otherwise.
 
-  **NOTE**: fiwia doesn't generate SIMD instructions, and this is the only function that can benefit from using them.
+  **NOTE**: fiwia doesn't generate SIMD instructions, and this function can benefit from using them.
   The implementation is thus suboptimal and this function is only included for completeness.
   You can probably get speedup by rewriting it in C in the following way:
   ```

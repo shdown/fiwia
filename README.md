@@ -70,9 +70,9 @@ Functions
 
 * `uint64_t asm_sub_q_leaky_${W}(uint64_t *a, uint64_t b)`
 
-  **WARNING**: leaky.
-
   Subtracts `b` from `{a, W}`. Returns borrow, either 0 or `(uint64_t) -1`.
+
+  **WARNING**: leaky.
 
 * `uint64_t asm_cmplt_${W}(const uint64_t *a, const uint64_t *b)`
 

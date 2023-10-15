@@ -868,7 +868,7 @@ def aors_masked_aux(emitter, a, b, reg_c, reg_mask, m_regs, aors, save=False, re
 
     if restore:
         assert reg_c is not None
-        emitter.emit(f'btq $0, {reg_c}')
+        emitter.emit(f'shlq $1, {reg_c}')
 
     for i in range(len(m_regs)):
         if (not restore) and (i == 0):
@@ -1112,8 +1112,8 @@ def fancy_shift_words(emitter, reg_b, n, cond_shx_words, assign_callback):
         bit = 1 << i
         if bit >= n:
             break
-        emitter.emit(f'btq ${i}, {reg_b}')
-        perform_pass(cond='c', amount=bit)
+        emitter.emit(f'testq ${bit}, {reg_b}')
+        perform_pass(cond='nz', amount=bit)
         i += 1
 
     emitter.emit(f'cmpq ${n - 1}, {reg_b}')

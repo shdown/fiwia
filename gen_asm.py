@@ -948,7 +948,7 @@ def FUNC_aors_q(emitter, n, aors, leaky=False):
             emitter.emit(f'{aors.ADDSUB}q {reg_b}, {a.displace(i)}')
             # We don't want to emit a 'jnc {label_done}' here since the probability of having a
             # carry is very close to 1/2 (can't be predicted well by the branch predictor).
-            # For the following words it is less than 2 ** -64.
+            # For the following words it is about 2 ** -64.
 
     if label_done is not None:
         emitter.label_here(label_done)

@@ -47,27 +47,6 @@ static int test_adx(void)
     }
 }
 
-static int test_sse2(void)
-{
-    fprintf(stderr, "Testing pslldq (SSE2)...\n");
-    uint64_t words[2] = {1, 2};
-    asm volatile (
-        "movdqu (%[ptr]), %%xmm0\n"
-        "pslldq $1, %%xmm0\n"
-        "movdqu %%xmm0, (%[ptr])\n"
-        : /*no outputs*/
-        : [ptr] "r" ((uint64_t *) words)
-        : "xmm0", "cc", "memory"
-    );
-    if (words[0] == 256 && words[1] == 512) {
-        fprintf(stderr, "pslldq is supported.\n");
-        return 0;
-    } else {
-        fprintf(stderr, "pslldq gave unexpected result.\n");
-        return 1;
-    }
-}
-
 static int test_avx(void)
 {
     fprintf(stderr, "Testing vmovdqu (AVX)...\n");
@@ -105,7 +84,7 @@ static int test_avx2(void)
 
 static void print_usage(void)
 {
-    fprintf(stderr, "USAGE: check_cap {bmi2 | adx | sse2 | avx | avx2}\n");
+    fprintf(stderr, "USAGE: check_cap {bmi2 | adx | avx | avx2}\n");
 }
 
 int main(int argc, char **argv)
@@ -122,10 +101,6 @@ int main(int argc, char **argv)
 
     if (strcmp(arg, "adx") == 0) {
         return test_adx();
-    }
-
-    if (strcmp(arg, "sse2") == 0) {
-        return test_sse2();
     }
 
     if (strcmp(arg, "avx") == 0) {

@@ -46,6 +46,15 @@ class RealReg(Reg):
     def __str__(self):
         return f'%{ALL_REGS.name_by_index(self.index)}'
 
+    def e_part(self):
+        base_name = str(self).lstrip('%r')
+        if base_name.isdigit():
+            # %r8 -> r8d
+            return f'%r{base_name}d'
+        else:
+            # %rax -> %eax
+            return f'%e{base_name}'
+
 
 class FakeReg(Reg):
     def __init__(self, keyword: str):
@@ -53,6 +62,9 @@ class FakeReg(Reg):
 
     def __str__(self):
         return f'![{self.keyword}]'
+
+    def e_part(self):
+        return f'!k[{self.keyword}]'
 
 
 class NoVacantReg(BaseException):
@@ -138,7 +150,7 @@ class SysvAbiFunctionEmitter(Emitter):
 
     def take_zero_reg(self) -> Reg:
         reg = self.reg_store.take(write=True)
-        self.emit(f'xorq {reg}, {reg}')
+        self.emit(f'xorl {reg.e_part()}, {reg.e_part()}')
         return reg
 
     def set_nargs(self, nargs: int) -> None:
@@ -683,7 +695,7 @@ def FUNC_div_q(emitter, n, operation='div'):
     rax = emitter.reg_store.take_by_name('rax', write=True)
     rdx = emitter.reg_store.take_by_name('rdx', write=True)
 
-    emitter.emit(f'xorq {rdx}, {rdx}')
+    emitter.emit(f'xorl {rdx.e_part()}, {rdx.e_part()}')
 
     for i in reversed(range(n)):
         emitter.emit(f'movq {a.displace(i)}, {rax}')

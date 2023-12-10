@@ -55,6 +55,19 @@ class RealReg(Reg):
             # %rax -> %eax
             return f'%e{base_name}'
 
+    def l_part(self):
+        base_name = str(self).lstrip('%r')
+        if base_name.isdigit():
+            # %r8 -> r8b
+            return f'%r{base_name}b'
+        else:
+            if 'x' in base_name:
+                # %rax -> %al
+                return f'%{base_name.rstrip("x")}l'
+            else:
+                # %rdi -> %dil
+                return f'%{base_name}l'
+
 
 class FakeReg(Reg):
     def __init__(self, keyword: str):
@@ -65,6 +78,9 @@ class FakeReg(Reg):
 
     def e_part(self):
         return f'!k[{self.keyword}]'
+
+    def l_part(self):
+        return f'!b[{self.keyword}]'
 
 
 class NoVacantReg(BaseException):
@@ -995,10 +1011,7 @@ def FUNC_cmplt(emitter, n, is_signed=False):
     reg_a = emitter.take_arg_reg(index=0, write=False)
     reg_b = emitter.take_arg_reg(index=1, write=False)
 
-    if is_signed:
-        reg_tmp = emitter.reg_store.take_by_name('rax', write=True)
-    else:
-        reg_tmp = emitter.reg_store.take(write=True)
+    reg_tmp = emitter.reg_store.take(write=True)
 
     a = PointerReg(reg_a)
     b = PointerReg(reg_b)
@@ -1010,12 +1023,11 @@ def FUNC_cmplt(emitter, n, is_signed=False):
         else:
             emitter.emit(f'subq {b.displace(i)}, {reg_tmp}')
 
+    ret = emitter.take_retval_reg()
     if is_signed:
-        emitter.emit('setl %al')
-        emitter.emit(f'movzbq %al, {reg_tmp}')
-        emitter.write_retval(reg_tmp)
+        emitter.emit(f'setl {ret.l_part()}')
+        emitter.emit(f'movzbq {ret.l_part()}, {ret}')
     else:
-        ret = emitter.take_retval_reg()
         emitter.emit(f'sbbq {ret}, {ret}')
 
 
@@ -1023,10 +1035,7 @@ def FUNC_cmple(emitter, n, is_signed=False):
     reg_a = emitter.take_arg_reg(index=0, write=False)
     reg_b = emitter.take_arg_reg(index=1, write=False)
 
-    if is_signed:
-        reg_tmp = emitter.reg_store.take_by_name('rax', write=True)
-    else:
-        reg_tmp = emitter.reg_store.take(write=True)
+    reg_tmp = emitter.reg_store.take(write=True)
 
     a = PointerReg(reg_a)
     b = PointerReg(reg_b)
@@ -1038,12 +1047,11 @@ def FUNC_cmple(emitter, n, is_signed=False):
         else:
             emitter.emit(f'subq {a.displace(i)}, {reg_tmp}')
 
+    ret = emitter.take_retval_reg()
     if is_signed:
-        emitter.emit('setge %al')
-        emitter.emit(f'movzbq %al, {reg_tmp}')
-        emitter.write_retval(reg_tmp)
+        emitter.emit(f'setge {ret.l_part()}')
+        emitter.emit(f'movzbq {ret.l_part()}, {ret}')
     else:
-        ret = emitter.take_retval_reg()
         emitter.emit(f'sbbq {ret}, {ret}')
         emitter.emit(f'notq {ret}')
 
